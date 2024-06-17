@@ -1,6 +1,6 @@
 module github.com/youkuang/xls
 
-go 1.21.8
+go 1.21
 
 require (
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a
