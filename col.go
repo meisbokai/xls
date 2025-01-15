@@ -11,7 +11,7 @@ import (
 	yymmdd "github.com/extrame/goyymmdd"
 )
 
-//content type
+// content type
 type contentHandler interface {
 	String(*WorkBook) []string
 	FirstCol() uint16
@@ -111,6 +111,7 @@ func (rk RK) number() (intNum int64, floatNum float64, isFloat bool) {
 }
 
 func (rk RK) String() string {
+
 	i, f, isFloat := rk.number()
 	if isFloat {
 		return strconv.FormatFloat(f, 'f', -1, 64)
@@ -168,7 +169,16 @@ type NumberCol struct {
 }
 
 func (c *NumberCol) String(wb *WorkBook) []string {
-	if fNo := wb.Xfs[c.Index].formatNo(); fNo != 0 {
+	fNo := wb.Xfs[c.Index].formatNo()
+	if formatter := wb.Formats[fNo]; formatter != nil {
+		formatterLower := strings.ToLower(formatter.str)
+		if strings.Contains(formatterLower, "#") ||
+			strings.Contains(formatterLower, ".00") {
+			return []string{strconv.FormatFloat(c.Float, 'f', -1, 64)}
+		}
+	}
+
+	if fNo != 0 {
 		t := timeFromExcelTime(c.Float, wb.dateMode == 1)
 		return []string{yymmdd.Format(t, wb.Formats[fNo].str)}
 	}
@@ -181,6 +191,7 @@ type FormulaStringCol struct {
 }
 
 func (c *FormulaStringCol) String(wb *WorkBook) []string {
+	// fmt.Printf("c.RenderedValue: %v\n", c.RenderedValue)
 	return []string{c.RenderedValue}
 }
 
@@ -199,6 +210,7 @@ type FormulaCol struct {
 }
 
 func (c *FormulaCol) String(wb *WorkBook) []string {
+	// fmt.Printf("c.Bts: %v\n", c.Bts)
 	return []string{"FormulaCol"}
 }
 
@@ -208,6 +220,7 @@ type RkCol struct {
 }
 
 func (c *RkCol) String(wb *WorkBook) []string {
+	// fmt.Printf("c.Xfrk: %v\n", c.Xfrk)
 	return []string{c.Xfrk.String(wb)}
 }
 
@@ -227,6 +240,7 @@ type labelCol struct {
 }
 
 func (c *labelCol) String(wb *WorkBook) []string {
+	// fmt.Printf("c.Str: %v\n", c.Str)
 	return []string{c.Str}
 }
 
