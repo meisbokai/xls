@@ -111,7 +111,6 @@ func (rk RK) number() (intNum int64, floatNum float64, isFloat bool) {
 }
 
 func (rk RK) String() string {
-
 	i, f, isFloat := rk.number()
 	if isFloat {
 		return strconv.FormatFloat(f, 'f', -1, 64)
@@ -176,6 +175,17 @@ func (c *NumberCol) String(wb *WorkBook) []string {
 			strings.Contains(formatterLower, ".00") {
 			return []string{strconv.FormatFloat(c.Float, 'f', -1, 64)}
 		}
+	}
+
+	switch fNo {
+	case 1: // Format: 0 (No decimal places)
+		return []string{strconv.FormatFloat(c.Float, 'f', 0, 64)} // Format to 0 decimal places
+	case 2: // Format: 0.00 (Two decimal places)
+		return []string{strconv.FormatFloat(c.Float, 'f', 2, 64)} // Format to 2 decimal places
+	case 3: // Format: #,##0 (Thousands separator, no decimals)
+		return []string{strconv.FormatFloat(c.Float, 'f', 0, 64)}
+	case 4: // Format: #,##0.00 (Thousands separator, two decimals)
+		return []string{strconv.FormatFloat(c.Float, 'f', 2, 64)}
 	}
 
 	if fNo != 0 {
