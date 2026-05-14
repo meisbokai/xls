@@ -172,7 +172,8 @@ func (c *NumberCol) String(wb *WorkBook) []string {
 	if formatter := wb.Formats[fNo]; formatter != nil {
 		formatterLower := strings.ToLower(formatter.str)
 		if strings.Contains(formatterLower, "#") ||
-			strings.Contains(formatterLower, ".00") {
+			strings.Contains(formatterLower, ".00") ||
+			strings.Contains(formatterLower, "general") {
 			return []string{strconv.FormatFloat(c.Float, 'f', -1, 64)}
 		}
 	}
