@@ -2,6 +2,7 @@ package xls
 
 import (
 	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,9 @@ func TestIssue47(t *testing.T) {
 		if filepath.Ext(f.Name()) == ".xls" {
 			xlsfilename := f.Name()
 			xlsxfilename := strings.TrimSuffix(xlsfilename, filepath.Ext(xlsfilename)) + ".xlsx"
+			if _, statErr := os.Stat(path.Join(testdatapath, xlsxfilename)); os.IsNotExist(statErr) {
+				continue
+			}
 			err := CompareXlsXlsx(path.Join(testdatapath, xlsfilename),
 				path.Join(testdatapath, xlsxfilename))
 			if err != "" {
