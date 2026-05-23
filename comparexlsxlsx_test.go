@@ -7,8 +7,9 @@ import (
 	"strconv"
 )
 
-//Compares xls and xlsx files
-func CompareXlsXlsx(xlsfilepathname string, xlsxfilepathname string) string {
+// compareXlsXlsx compares xls and xlsx files cell-by-cell.
+// Returns empty string on match, or a description of the first mismatch.
+func compareXlsXlsx(xlsfilepathname string, xlsxfilepathname string) string {
 	xlsFile, err := Open(xlsfilepathname, "utf-8")
 	if err != nil {
 		return fmt.Sprintf("Cant open xls file: %s", err)
