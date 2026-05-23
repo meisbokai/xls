@@ -58,7 +58,7 @@ func (w *WorkBook) addXf(xf st_xf_data) {
 }
 
 func (w *WorkBook) addFont(font *FontInfo, buf io.ReadSeeker) {
-	name, _ := w.get_string(buf, uint16(font.NameB))
+	name, _ := w.get_string(buf, uint16(font.NameB), false)
 	w.Fonts = append(w.Fonts, Font{Info: font, Name: name})
 }
 
@@ -89,15 +89,39 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 		if pre.Id == 0xfc {
 			var size uint16
 			var err error
+			isContinuation := false
 			if wb.continue_utf16 >= 1 {
+				// Previous record ran out mid-string content; resume it.
 				size = wb.continue_utf16
 				wb.continue_utf16 = 0
+				isContinuation = true
 			} else {
-				err = binary.Read(buf_item, binary.LittleEndian, &size)
+				// Previous record may have ended after string content but
+				// before its trailing rgRun (rich-text format runs) or
+				// ExtRst (phonetic) blocks. Consume those bytes here before
+				// reading the next string's size, otherwise the rgRun bytes
+				// get misread as a length prefix and the SST desyncs.
+				if wb.continue_rich > 0 {
+					rsz := int64(4 * wb.continue_rich)
+					if wb.Is5ver {
+						rsz = int64(2 * wb.continue_rich)
+					}
+					skip := make([]byte, rsz)
+					_, err = io.ReadFull(buf_item, skip)
+					wb.continue_rich = 0
+				}
+				if err == nil && wb.continue_apsb > 0 {
+					skip := make([]byte, wb.continue_apsb)
+					_, err = io.ReadFull(buf_item, skip)
+					wb.continue_apsb = 0
+				}
+				if err == nil {
+					err = binary.Read(buf_item, binary.LittleEndian, &size)
+				}
 			}
 			for err == nil && offset_pre < len(wb.sst) {
 				var str string
-				str, err = wb.get_string(buf_item, size)
+				str, err = wb.get_string(buf_item, size, isContinuation)
 				wb.sst[offset_pre] = wb.sst[offset_pre] + str
 
 				if err == io.EOF {
@@ -106,6 +130,7 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 
 				offset_pre++
 				err = binary.Read(buf_item, binary.LittleEndian, &size)
+				isContinuation = false
 			}
 		}
 		offset = offset_pre
@@ -124,10 +149,9 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 			err = binary.Read(buf_item, binary.LittleEndian, &size)
 			if err == nil {
 				var str string
-				str, err = wb.get_string(buf_item, size)
+				str, err = wb.get_string(buf_item, size, false)
 				wb.sst[i] = wb.sst[i] + str
 			}
-
 			if err == io.EOF {
 				break
 			}
@@ -155,7 +179,7 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 	case 0x41E: //FORMAT
 		font := new(Format)
 		binary.Read(buf_item, binary.LittleEndian, &font.Head)
-		font.str, _ = wb.get_string(buf_item, font.Head.Size)
+		font.str, _ = wb.get_string(buf_item, font.Head.Size, false)
 		wb.addFormat(font)
 	case 0x22: //DATEMODE
 		binary.Read(buf_item, binary.LittleEndian, &wb.dateMode)
@@ -167,7 +191,15 @@ func decodeWindows1251(enc []byte) string {
 	out, _ := dec.Bytes(enc)
 	return string(out)
 }
-func (w *WorkBook) get_string(buf io.ReadSeeker, size uint16) (res string, err error) {
+// get_string reads a BIFF8 XLUnicodeRichExtendedString (or BIFF5 byte string).
+//
+// When isContinuation is true, the caller is resuming an SST string that was
+// split across a CONTINUE boundary. Per [MS-XLS] §2.5.293, the resumption
+// begins with a single fHighByte byte (only bit 0 — compressed vs. UTF-16 —
+// is meaningful); the cRun and cbExtRst fields belong to the original
+// string's header and must NOT be re-read here, otherwise subsequent SST
+// entries desync and downstream string lookups return garbled or empty text.
+func (w *WorkBook) get_string(buf io.ReadSeeker, size uint16, isContinuation bool) (res string, err error) {
 	if w.Is5ver {
 		var bts = make([]byte, size)
 		_, err = buf.Read(bts)
@@ -178,17 +210,34 @@ func (w *WorkBook) get_string(buf io.ReadSeeker, size uint16) (res string, err e
 		var phonetic_size = uint32(0)
 		var flag byte
 		err = binary.Read(buf, binary.LittleEndian, &flag)
-		if flag&0x8 != 0 {
-			err = binary.Read(buf, binary.LittleEndian, &richtext_num)
-		} else if w.continue_rich > 0 {
-			richtext_num = w.continue_rich
-			w.continue_rich = 0
-		}
-		if flag&0x4 != 0 {
-			err = binary.Read(buf, binary.LittleEndian, &phonetic_size)
-		} else if w.continue_apsb > 0 {
-			phonetic_size = w.continue_apsb
-			w.continue_apsb = 0
+		if isContinuation {
+			// Resumption byte carries only the fHighByte bit. The original
+			// string's fRichSt/fExtSt fields belong to its in-flight header
+			// and were already read in the previous record; restore the
+			// pending rgRun / ExtRst lengths so they're appended after the
+			// remaining character data.
+			flag = flag & 0x01
+			if w.continue_rich > 0 {
+				richtext_num = w.continue_rich
+				w.continue_rich = 0
+			}
+			if w.continue_apsb > 0 {
+				phonetic_size = w.continue_apsb
+				w.continue_apsb = 0
+			}
+		} else {
+			if flag&0x8 != 0 {
+				err = binary.Read(buf, binary.LittleEndian, &richtext_num)
+			} else if w.continue_rich > 0 {
+				richtext_num = w.continue_rich
+				w.continue_rich = 0
+			}
+			if flag&0x4 != 0 {
+				err = binary.Read(buf, binary.LittleEndian, &phonetic_size)
+			} else if w.continue_apsb > 0 {
+				phonetic_size = w.continue_apsb
+				w.continue_apsb = 0
+			}
 		}
 		if flag&0x1 != 0 {
 			var bts = make([]uint16, size)
@@ -254,7 +303,7 @@ func (w *WorkBook) get_string(buf io.ReadSeeker, size uint16) (res string, err e
 }
 
 func (w *WorkBook) addSheet(sheet *boundsheet, buf io.ReadSeeker) {
-	name, _ := w.get_string(buf, uint16(sheet.Name))
+	name, _ := w.get_string(buf, uint16(sheet.Name), false)
 	w.sheets = append(w.sheets, &WorkSheet{bs: sheet, Name: name, wb: w, Visibility: TWorkSheetVisibility(sheet.Visible)})
 }
 

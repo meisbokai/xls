@@ -119,7 +119,7 @@ func (w *WorkSheet) parseBof(buf io.ReadSeeker, b *bof, pre *bof, col_pre interf
 			c.Col = ch.Header.Col
 			var cStringLen uint16
 			binary.Read(buf, binary.LittleEndian, &cStringLen)
-			str, err := w.wb.get_string(buf, cStringLen)
+			str, err := w.wb.get_string(buf, cStringLen, false)
 			if nil == err {
 				c.RenderedValue = str
 			}
@@ -136,7 +136,7 @@ func (w *WorkSheet) parseBof(buf io.ReadSeeker, b *bof, pre *bof, col_pre interf
 		binary.Read(buf, binary.LittleEndian, &c.BlankCol)
 		var count uint16
 		binary.Read(buf, binary.LittleEndian, &count)
-		c.Str, _ = w.wb.get_string(buf, count)
+		c.Str, _ = w.wb.get_string(buf, count, false)
 		col = c
 	case 0x201: //BLANK
 		col = new(BlankCol)
