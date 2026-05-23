@@ -1,6 +1,7 @@
 package xls
 
 import (
+	"regexp"
 	"testing"
 	"unicode"
 )
@@ -68,5 +69,94 @@ func TestSSTContinueDoesNotDesync(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Regression test for a second SST CONTINUE edge case: a record may end
+// after a string's character data is complete but mid-way through its
+// trailing rgRun (rich-text format runs) or ExtRst (phonetic) bytes. The
+// loop used to break without advancing the SST index, so the next CONTINUE
+// record then wrote the *next* string onto the already-complete entry via
+// `sst[i] = sst[i] + str`, gluing two strings into one slot and shifting
+// every subsequent SST entry by one.
+//
+// In testdata/sst-error.xls this manifests at row 285: column 2 (timestamp)
+// previously held "02:38:35 PMFunds Transfer-IB\n..." (timestamp + the
+// description that should have been in column 3), with the remainder of the
+// row shifted left by one column. Post-fix, column 2 holds only the
+// timestamp and column 3 holds the description as authored.
+func TestSSTContinueTrailerOverflowDoesNotMerge(t *testing.T) {
+	wb, err := Open("testdata/sst-error.xls", "utf-8")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	sheet := wb.GetSheet(0)
+	if sheet == nil {
+		t.Fatal("no sheet 0")
+	}
+
+	r := sheet.Row(285)
+	if r == nil {
+		t.Fatal("row 285 missing")
+	}
+
+	timestampRe := regexp.MustCompile(`^\d{2}:\d{2}:\d{2} (AM|PM)$`)
+
+	c2 := r.Col(2)
+	if !timestampRe.MatchString(c2) {
+		t.Errorf("row 285 col 2 should be a bare HH:MM:SS AM/PM timestamp, got %q "+
+			"— a trailing description glued on indicates the trailer-overflow "+
+			"SST merge bug has regressed", c2)
+	}
+
+	c3 := r.Col(3)
+	if c3 == "" {
+		t.Errorf("row 285 col 3 is empty — the description shifted out, "+
+			"likely re-merged into col 2 (col 2 was %q)", c2)
+	}
+	// "Funds Transfer-IB" is the literal first line of row 285's description
+	// in the source file; if the SST is shifted by one, col 3 will instead
+	// contain the next row's value ("PAYNOW-FAST\n...") or a numeric token.
+	if c3 != "" && !startsWithAny(c3, "Funds Transfer-IB", "Inward", "PAYNOW-FAST", "Bulk -", "SVC Chg", "CR Retail", "Outward") {
+		t.Errorf("row 285 col 3 = %q does not look like a transaction description; "+
+			"likely an SST shift", c3)
+	}
+
+	// Walk rows 285..320 and assert column 2 is timestamp-shaped on every row
+	// that has data. If the SST is off by one anywhere in this window, col 2
+	// will hold description text or a numeric string instead.
+	checked := 0
+	for i := 285; i <= 320; i++ {
+		rr := sheet.Row(i)
+		if rr == nil {
+			continue
+		}
+		c0 := rr.Col(0)
+		if c0 == "" {
+			// Skip header/blank rows that don't carry a transaction.
+			continue
+		}
+		c2 := rr.Col(2)
+		if c2 == "" {
+			continue
+		}
+		if !timestampRe.MatchString(c2) {
+			t.Errorf("row %d col 2 = %q is not a HH:MM:SS AM/PM timestamp; "+
+				"SST is shifted in this window", i, c2)
+		}
+		checked++
+	}
+	if checked < 30 {
+		t.Errorf("only %d rows in [285,320] had a non-empty timestamp column; "+
+			"expected ~36, suggests rows are missing", checked)
+	}
+}
+
+func startsWithAny(s string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if len(s) >= len(p) && s[:len(p)] == p {
+			return true
+		}
+	}
+	return false
 }
 
