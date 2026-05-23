@@ -125,6 +125,13 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 				wb.sst[offset_pre] = wb.sst[offset_pre] + str
 
 				if err == io.EOF {
+					// If only the trailer (rgRun / ExtRst) overflowed,
+					// the string itself is complete — advance so the
+					// next CONTINUE starts at the next SST slot instead
+					// of appending onto this one.
+					if wb.continue_utf16 == 0 && (wb.continue_rich > 0 || wb.continue_apsb > 0) {
+						offset_pre++
+					}
 					break
 				}
 
@@ -153,6 +160,12 @@ func (wb *WorkBook) parseBof(buf io.ReadSeeker, b *bof, pre *bof, offset_pre int
 				wb.sst[i] = wb.sst[i] + str
 			}
 			if err == io.EOF {
+				// String content complete but trailer (rgRun / ExtRst)
+				// overflowed into the next CONTINUE — advance i so the
+				// next record doesn't append onto this finished entry.
+				if wb.continue_utf16 == 0 && (wb.continue_rich > 0 || wb.continue_apsb > 0) {
+					i++
+				}
 				break
 			}
 		}
