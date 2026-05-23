@@ -30,7 +30,7 @@ Key methods:
 - `GetSheet(num)` -- returns `*WorkSheet` by index
 - `NumSheets()` -- sheet count
 - `ReadAllCells(max)` -- read all cells up to max rows per sheet
-- `get_string(buf, size)` -- reads SST string (ASCII or UTF-16LE, handles CONTINUE records)
+- `get_string(buf, size, isContinuation)` -- reads SST string (ASCII or UTF-16LE, handles CONTINUE records)
 
 ### WorkSheet (`worksheet.go`)
 
@@ -39,7 +39,7 @@ Represents one sheet. Parses sheet-level BIFF records into rows and cells.
 ```text
 WorkSheet
   +-- Name      string
-  +-- Visible   TWorkSheetVisibility
+  +-- Visibility TWorkSheetVisibility
   +-- rows      map[int]*RowInfo
 ```
 
@@ -53,7 +53,7 @@ A single row of cells.
 
 ### Cell Types (`col.go`)
 
-All implement `Coler` interface (`Row`, `FirstCol`, `LastCol`).
+All implement `Coler` interface (`Row`). Cell content is provided via the embedded `contentHandler` interface (`String`, `FirstCol`, `LastCol`).
 
 | Type | BIFF Record | Description |
 |------|------------|-------------|
@@ -106,7 +106,7 @@ Cell (e.g. NumberCol)
   -> String(wb *WorkBook)
     -> wb.xf[cell.Xf] -> formatNo()
       -> wb.formats[no] -> Format string
-        -> applyFormat(value, formatString)
+        -> inline format application (strconv.FormatFloat, timeFromExcelTime, goyymmdd.Format)
 ```
 
 Format numbers 0-49 are built-in Excel formats. Custom formats are stored in the `Format` struct.
