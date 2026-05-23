@@ -59,9 +59,15 @@ defer closer.Close()
 ### Open from reader
 
 ```go
-file, _ := os.Open("spreadsheet.xls")
+file, err := os.Open("spreadsheet.xls")
+if err != nil {
+    panic(err)
+}
 defer file.Close()
 wb, err := xls.OpenReader(file, "utf-8")
+if err != nil {
+    panic(err)
+}
 ```
 
 ## API

@@ -33,7 +33,7 @@ go mod download
 - Use standard `go test` with **table-driven tests** where appropriate
 - Place test data files in `testdata/`
 - For regression tests, include both `.xls` and `.xlsx` versions when possible
-- Use `CompareXlsXlsx` to validate output against the reference xlsx library
+- Use the `compareXlsXlsx` helper in `comparexlsxlsx_test.go` to validate output against the reference xlsx library
 - Name regression tests after the issue: `TestIssue47`, `TestSstContinue`, etc.
 
 ### Test Structure

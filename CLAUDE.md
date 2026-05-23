@@ -35,7 +35,7 @@ go vet ./...
 
 ### Data Flow
 
-```
+```text
 .xls file -> OLE2 container (ole2 package)
          -> WorkBook (workbook.go)
            -> WorkSheet (worksheet.go)

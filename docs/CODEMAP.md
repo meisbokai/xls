@@ -16,7 +16,7 @@
 
 Top-level parser. Holds all sheets, fonts, formats, XF table, and SST.
 
-```
+```text
 WorkBook
   +-- Sheets    []WorkSheet    (via GetSheet/NumSheets)
   +-- fonts     []FontInfo
@@ -36,7 +36,7 @@ Key methods:
 
 Represents one sheet. Parses sheet-level BIFF records into rows and cells.
 
-```
+```text
 WorkSheet
   +-- Name      string
   +-- Visible   TWorkSheetVisibility
@@ -84,7 +84,7 @@ All implement `Coler` interface (`Row`, `FirstCol`, `LastCol`).
 
 ## Data Flow: Reading a Cell
 
-```
+```text
 1. Open() -> ole2.Open() -> parse OLE2 container
 2. WorkBook.Parse(buf) -> walk BIFF records
    - BOF records -> identify sheet boundaries
@@ -101,7 +101,7 @@ All implement `Coler` interface (`Row`, `FirstCol`, `LastCol`).
 
 ## Number Format Chain
 
-```
+```text
 Cell (e.g. NumberCol)
   -> String(wb *WorkBook)
     -> wb.xf[cell.Xf] -> formatNo()
@@ -122,9 +122,9 @@ Excel stores dates as float64 days since 1900-01-01 (or 1904-01-01 in 1904 date 
 
 | File | Tests |
 |------|-------|
-| `xls_test.go` | Core Open/Parse functionality |
+| `reading_test.go` | Core Open/Parse functionality |
 | `example_test.go` | GoDoc examples |
-| `bigtable_test.go` | Large table parsing |
-| `issue47_test.go` | Regression test for issue #47 |
+| `large_dataset_test.go` | Large table parsing |
+| `format_parity_test.go` | Cross-format parity (xls vs xlsx) |
 
-Test data in `testdata/` includes `.xls`/`.xlsx` pairs for cross-validation via `CompareXlsXlsx`.
+Test data in `testdata/` includes `.xls`/`.xlsx` pairs for cross-validation via `compareXlsXlsx` in `comparexlsxlsx_test.go`.
