@@ -11,6 +11,17 @@ import (
 	yymmdd "github.com/extrame/goyymmdd"
 )
 
+// formatExcelDate renders an Excel date whose serial is already converted to t.
+// goyymmdd cannot handle locale-tagged date formats ("[$-XXXX]..."): it emits the
+// locale tag literally and drops the month. Since t is already correct, emit an
+// unambiguous ISO date for those formats instead of the mangled rendering.
+func formatExcelDate(t time.Time, format string) string {
+	if strings.HasPrefix(strings.TrimSpace(format), "[$-") {
+		return t.Format("2006-01-02")
+	}
+	return yymmdd.Format(t, format)
+}
+
 // content type
 type contentHandler interface {
 	String(*WorkBook) []string
@@ -72,7 +83,7 @@ func (xf *XfRk) String(wb *WorkBook) string {
 						f = float64(i)
 					}
 					t := timeFromExcelTime(f, wb.dateMode == 1)
-					return yymmdd.Format(t, formatter.str)
+					return formatExcelDate(t, formatter.str)
 				}
 			}
 			// see http://www.openoffice.org/sc/excelfileformat.pdf Page #174
@@ -191,7 +202,7 @@ func (c *NumberCol) String(wb *WorkBook) []string {
 
 	if fNo != 0 {
 		t := timeFromExcelTime(c.Float, wb.dateMode == 1)
-		return []string{yymmdd.Format(t, wb.Formats[fNo].str)}
+		return []string{formatExcelDate(t, wb.Formats[fNo].str)}
 	}
 	return []string{strconv.FormatFloat(c.Float, 'f', -1, 64)}
 }
